@@ -101,7 +101,7 @@ def start_server(
                 if entry_type is EntryType.ACCEPT:
                     # logger.debug('Connection made')
                     uring.submit_accept_entry(fd, addr, addrlen)
-                    uring.submit_read_entry(client_socket=cqe.res, size=1024)
+                    uring.submit_read_entry(client_socket=cqe.res, size=256)
 
                 elif entry_type is EntryType.READ:
                     buffer, client_socket, *_ = args

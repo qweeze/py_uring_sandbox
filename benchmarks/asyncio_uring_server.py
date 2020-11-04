@@ -5,7 +5,7 @@ import logging.config
 import os
 import signal
 import socket
-from typing import Any, Callable, Dict
+from typing import Any, Awaitable, Callable, Dict
 
 import liburing
 
@@ -102,7 +102,7 @@ class Uring:
 async def start_server(
     host: str,
     port: int,
-    handler: Callable[[bytes], bytes],
+    handler: Callable[[bytes], Awaitable[bytes]],
     backlog: int = 100,
     reuse_addr: bool = False,
     reuse_port: bool = False,
@@ -149,7 +149,7 @@ async def start_server(
             if entry_type is EntryType.ACCEPT:
                 # logger.debug('Connection made')
                 uring.submit_accept_entry(fd, addr, addrlen)
-                uring.submit_read_entry(client_socket=cqe.res, size=1024)
+                uring.submit_read_entry(client_socket=cqe.res, size=256)
 
             elif entry_type is EntryType.READ:
                 buffer, client_socket, *_ = args
