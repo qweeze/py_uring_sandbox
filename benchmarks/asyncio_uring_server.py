@@ -22,7 +22,7 @@ class EntryType(enum.Enum):
 
 
 class Uring:
-    def __init__(self, queue_size: int = 32, loop: asyncio.BaseEventLoop = None):
+    def __init__(self, queue_size: int = 64, loop: asyncio.BaseEventLoop = None):
         self._ring = liburing.io_uring()
         self._cqes = liburing.io_uring_cqes()
         self._queue_size = queue_size
@@ -46,12 +46,13 @@ class Uring:
         self._loop.remove_reader(self._event_fd)
         liburing.io_uring_queue_exit(self._ring)
 
-    def submit_accept_entry(self, fd: int, addr: liburing, addrlen):
+    def submit_accept_entry(self, fd: int):
         if self._is_closing:
             return
         sqe = liburing.io_uring_get_sqe(self._ring)
+        addr, addrlen = liburing.sockaddr()
         liburing.io_uring_prep_accept(sqe, fd, addr, addrlen, 0)
-        self._submit(EntryType.ACCEPT, sqe)
+        self._submit(EntryType.ACCEPT, sqe, addr, addrlen)
 
     def submit_read_entry(self, client_socket: int, size: int):
         sqe = liburing.io_uring_get_sqe(self._ring)
@@ -117,7 +118,6 @@ async def start_server(
     sock.listen(backlog)
 
     fd = sock.fileno()
-    addr, addrlen = liburing.sockaddr()
 
     loop = asyncio.get_event_loop()
     uring = Uring()
@@ -132,7 +132,7 @@ async def start_server(
     for sig in signal.SIGTERM, signal.SIGINT, signal.SIGHUP:
         loop.add_signal_handler(sig, on_stop)
 
-    uring.submit_accept_entry(fd, addr, addrlen)
+    uring.submit_accept_entry(fd)
     logger.info('listening on %s:%s', host, port)
 
     async def handler_wrapper(request, client_socket):
@@ -148,7 +148,7 @@ async def start_server(
         try:
             if entry_type is EntryType.ACCEPT:
                 # logger.debug('Connection made')
-                uring.submit_accept_entry(fd, addr, addrlen)
+                uring.submit_accept_entry(fd)
                 uring.submit_read_entry(client_socket=cqe.res, size=256)
 
             elif entry_type is EntryType.READ:

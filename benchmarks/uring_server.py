@@ -28,10 +28,11 @@ class Uring:
     def close(self):
         liburing.io_uring_queue_exit(self._ring)
 
-    def submit_accept_entry(self, fd: int, addr: liburing, addrlen):
+    def submit_accept_entry(self, fd: int):
         sqe = liburing.io_uring_get_sqe(self._ring)
+        addr, addrlen = liburing.sockaddr()
         liburing.io_uring_prep_accept(sqe, fd, addr, addrlen, 0)
-        self._submit(EntryType.ACCEPT, sqe)
+        self._submit(EntryType.ACCEPT, sqe, addr, addrlen)
 
     def submit_read_entry(self, client_socket: int, size: int):
         sqe = liburing.io_uring_get_sqe(self._ring)
@@ -87,20 +88,18 @@ def start_server(
     sock.listen(backlog)
 
     fd = sock.fileno()
-    addr, addrlen = liburing.sockaddr()
-
     uring = Uring()
 
     try:
         uring.start()
-        uring.submit_accept_entry(fd, addr, addrlen)
+        uring.submit_accept_entry(fd)
         logger.info('listening on %s:%s', host, port)
 
         for cqe, entry_type, *args in uring.iter_cqes():
             try:
                 if entry_type is EntryType.ACCEPT:
                     # logger.debug('Connection made')
-                    uring.submit_accept_entry(fd, addr, addrlen)
+                    uring.submit_accept_entry(fd)
                     uring.submit_read_entry(client_socket=cqe.res, size=256)
 
                 elif entry_type is EntryType.READ:
@@ -144,4 +143,4 @@ if __name__ == '__main__':
     def handle_request(request: bytes) -> bytes:
         return b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK'
 
-    start_server('0.0.0.0', 8000, handle_request)
+    start_server('0.0.0.0', 8000, handle_request, reuse_addr=True, reuse_port=True)
